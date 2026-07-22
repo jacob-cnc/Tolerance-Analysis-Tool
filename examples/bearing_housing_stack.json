@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0.0",
+  "unit_system": "inch",
+  "standard_mode": "asme_y14_5",
+  "project_name": "Bearing Housing Axial Stack-Up",
+  "created": "2025-01-15T08:30:00+00:00",
+  "modified": "2025-01-15T14:22:00+00:00",
+  "tolerance_chains": [
+    {
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Axial Preload Shim Gap",
+      "description": "Stack-up from housing face to snap ring groove. The resulting gap dimension represents the space available for the preload shim. Goal: verify shim gap falls within 0.030 to 0.065 inch.",
+      "contributors": [
+        {
+          "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+          "name": "Housing Bore Depth",
+          "nominal": 1.5000,
+          "tolerance_type": "bilateral",
+          "upper_tolerance": 0.002,
+          "lower_tolerance": 0.002,
+          "direction": "positive",
+          "distribution": "normal",
+          "description": "CNC bored pocket for bearing OD",
+          "notes": "",
+          "material": "6061-T6 Aluminum"
+        },
+        {
+          "id": "6ba7b810-9dad-41d4-80b5-6c2a1f3e7d90",
+          "name": "Bearing Width",
+          "nominal": 0.7500,
+          "tolerance_type": "bilateral",
+          "upper_tolerance": 0.0005,
+          "lower_tolerance": 0.0005,
+          "direction": "positive",
+          "distribution": "normal",
+          "description": "Angular contact bearing overall width",
+          "notes": "",
+          "material": "52100 Chrome Steel"
+        },
+        {
+          "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+          "name": "Spacer Ring",
+          "nominal": 0.1250,
+          "tolerance_type": "bilateral",
+          "upper_tolerance": 0.001,
+          "lower_tolerance": 0.001,
+          "direction": "positive",
+          "distribution": "uniform",
+          "description": "Ground spacer between bearings",
+          "notes": "",
+          "material": "1018 Cold Rolled Steel"
+        },
+        {
+          "id": "9a8b7c6d-5e4f-43a2-b1c0-d9e8f7a6b5c4",
+          "name": "Snap Ring Groove Position",
+          "nominal": 2.2860,
+          "tolerance_type": "bilateral",
+          "upper_tolerance": 0.003,
+          "lower_tolerance": 0.003,
+          "direction": "negative",
+          "distribution": "normal",
+          "description": "Wire EDM groove location from housing face",
+          "notes": "",
+          "material": "6061-T6 Aluminum"
+        },
+        {
+          "id": "b3d4e5f6-a7b8-49c0-d1e2-f3a4b5c6d7e8",
+          "name": "Snap Ring Thickness",
+          "nominal": 0.0420,
+          "tolerance_type": "bilateral",
+          "upper_tolerance": 0.002,
+          "lower_tolerance": 0.002,
+          "direction": "negative",
+          "distribution": "triangular",
+          "description": "Standard external snap ring",
+          "notes": "",
+          "material": "Spring Steel"
+        }
+      ],
+      "analysis_settings": {
+        "monte_carlo_iterations": 10000
+      }
+    }
+  ]
+}

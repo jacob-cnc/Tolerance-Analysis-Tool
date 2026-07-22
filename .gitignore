@@ -32,3 +32,6 @@ Desktop.ini
 
 # Project-specific
 *.tmp
+
+# Render harness output (generated PNGs)
+tests/renders/*.png
