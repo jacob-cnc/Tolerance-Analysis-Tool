@@ -256,3 +256,74 @@ class NewChainDialog(QDialog):
         dialog = NewChainDialog(parent)
         dialog.exec_()
         return dialog.get_result()
+
+
+class ResultsSummaryDialog(QDialog):
+    """Scrollable dialog for displaying analysis results and warnings.
+
+    Unlike QMessageBox, this supports arbitrarily long content with a
+    scroll bar so nothing gets cut off.
+    """
+
+    def __init__(
+        self,
+        parent: Optional[QWidget],
+        title: str,
+        message: str,
+        has_critical: bool = False,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumSize(520, 400)
+        self.resize(560, 600)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        # Icon + title row
+        if has_critical:
+            icon_text = "\u26a0\ufe0f"
+        else:
+            icon_text = "\u2139\ufe0f"
+
+        header = QLabel(f"{icon_text}  {title}")
+        header.setStyleSheet("font-size: 12pt; font-weight: bold;")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        # Scrollable text area
+        from PyQt5.QtWidgets import QScrollArea, QTextEdit
+
+        self._text_edit = QTextEdit()
+        self._text_edit.setReadOnly(True)
+        self._text_edit.setPlainText(message)
+        self._text_edit.setStyleSheet(
+            "QTextEdit { font-family: 'JetBrains Mono', 'Consolas', monospace; "
+            "font-size: 9pt; background: #2a2a3e; color: #e0e0e0; "
+            "border: 1px solid #444; padding: 8px; }"
+        )
+        layout.addWidget(self._text_edit)
+
+        # OK button
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(self.accept)
+        layout.addWidget(button_box)
+
+    @staticmethod
+    def show_results(
+        parent: Optional[QWidget],
+        title: str,
+        message: str,
+        has_critical: bool = False,
+    ) -> None:
+        """Show the results summary dialog.
+
+        Args:
+            parent: Parent widget.
+            title: Dialog title.
+            message: Full results text.
+            has_critical: Whether critical warnings are present (changes icon).
+        """
+        dialog = ResultsSummaryDialog(parent, title, message, has_critical)
+        dialog.exec_()

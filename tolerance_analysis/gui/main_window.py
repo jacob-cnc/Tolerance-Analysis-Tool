@@ -28,11 +28,12 @@ from tolerance_analysis.boundary.standards import StandardMode
 from tolerance_analysis.boundary.unit_converter import UnitConverter, UnitSystem
 from tolerance_analysis.gui.chain_tab import ChainTab
 from tolerance_analysis.gui.detail_panel import DetailPanel
-from tolerance_analysis.gui.dialogs import NewChainDialog
+from tolerance_analysis.gui.dialogs import NewChainDialog, ResultsSummaryDialog
 from tolerance_analysis.gui.help_panel import HelpPanel
 from tolerance_analysis.gui.results_panel import ResultsPanel
 from tolerance_analysis.gui.theme import STYLESHEET
 from tolerance_analysis.gui.visualization import VisualizationCanvas
+from tolerance_analysis.gui.viz_debug_dock import VizDebugDock
 
 
 class MainWindow(QMainWindow):
@@ -62,6 +63,7 @@ class MainWindow(QMainWindow):
         self._detail_panel = DetailPanel()
         self._visualization = VisualizationCanvas()
         self._results_panel = ResultsPanel()
+        self._debug_dock: VizDebugDock | None = None
 
         # --- Build UI ---
         self._setup_menu_bar()
@@ -147,6 +149,12 @@ class MainWindow(QMainWindow):
         self.action_help_topics = QAction("Help &Topics", self)
         self.action_help_topics.triggered.connect(self._on_help_topics)
         help_menu.addAction(self.action_help_topics)
+
+        help_menu.addSeparator()
+
+        self.action_debug_viz = QAction("Toggle &Viz Debug Dock", self)
+        self.action_debug_viz.triggered.connect(self._on_toggle_debug_dock)
+        help_menu.addAction(self.action_debug_viz)
 
         help_menu.addSeparator()
 
@@ -238,9 +246,8 @@ class MainWindow(QMainWindow):
         # ChainTab → DetailPanel: show selected contributor details
         self._chain_tab.contributor_selected.connect(self._on_contributor_selected)
 
-        # ChainTab → refresh visualization and results when chain data changes
-        self._chain_tab.chain_changed.connect(self._refresh_visualization)
-        self._chain_tab.chain_changed.connect(self._refresh_results)
+        # ChainTab → auto-rerun analyses and refresh display when chain data changes
+        self._chain_tab.chain_changed.connect(self._on_chain_data_changed)
 
         # DetailPanel → Controller: update contributor properties
         self._detail_panel.distribution_changed.connect(self._on_distribution_changed)
@@ -250,6 +257,34 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Signal Handlers — Cross-widget wiring
     # ------------------------------------------------------------------
+
+    def _on_chain_data_changed(self) -> None:
+        """Auto-rerun any previously-computed analyses when chain data changes.
+
+        This fires when the user edits a cell in the contributor table,
+        adds/removes a contributor, or reorders the chain. It silently
+        reruns whichever analyses were already computed so the visualization
+        and results stay in sync without requiring the user to re-click
+        analysis buttons.
+        """
+        chain_id = self._get_active_chain_id()
+        if chain_id is None:
+            self._refresh_visualization()
+            return
+
+        results = self.controller.get_results(chain_id)
+        if results is not None:
+            # Re-run whichever analyses were previously computed
+            if results.worst_case is not None:
+                self.controller.run_worst_case(chain_id)
+            if results.rss is not None:
+                self.controller.run_rss(chain_id)
+            if results.monte_carlo is not None:
+                iterations = results.monte_carlo.num_iterations
+                self.controller.run_monte_carlo(chain_id, iterations=iterations)
+
+        self._refresh_visualization()
+        self._refresh_results()
 
     def _on_contributor_selected(self, contributor_id: str) -> None:
         """Look up the contributor and display in the detail panel."""
@@ -266,7 +301,7 @@ class MainWindow(QMainWindow):
         self._detail_panel.clear()
 
     def _on_distribution_changed(self, contributor_id: str, dist_value: str) -> None:
-        """Update a contributor's distribution type and refresh visualization."""
+        """Update a contributor's distribution type and auto-rerun analyses."""
         chain_id = self._get_active_chain_id()
         if chain_id is None:
             return
@@ -282,7 +317,7 @@ class MainWindow(QMainWindow):
                 except ValueError:
                     pass
                 break
-        self._refresh_visualization()
+        self._on_chain_data_changed()
 
     def _on_notes_changed(self, contributor_id: str, notes: str) -> None:
         """Update a contributor's notes field."""
@@ -511,6 +546,17 @@ class MainWindow(QMainWindow):
         help_dialog = HelpPanel(self)
         help_dialog.show()
 
+    def _on_toggle_debug_dock(self) -> None:
+        """Toggle the visualization debug dock panel."""
+        if self._debug_dock is None:
+            self._debug_dock = VizDebugDock(self._visualization, self)
+            self.addDockWidget(Qt.RightDockWidgetArea, self._debug_dock)
+        else:
+            if self._debug_dock.isVisible():
+                self._debug_dock.hide()
+            else:
+                self._debug_dock.show()
+
     def _on_about(self) -> None:
         """Show about dialog."""
         QMessageBox.about(
@@ -529,6 +575,8 @@ class MainWindow(QMainWindow):
     def _show_results_summary(self, chain_name: str, results, unit_system) -> None:
         """Show a plain-language results summary dialog after analysis.
 
+        Includes engineering warnings when potential issues are detected.
+
         Args:
             chain_name: Name of the analyzed tolerance chain.
             results: AnalysisResults object with the computed results.
@@ -536,6 +584,8 @@ class MainWindow(QMainWindow):
         """
         if results is None:
             return
+
+        from tolerance_analysis.engine.warnings import evaluate_warnings, WarningSeverity
 
         converter = UnitConverter()
         unit = '"' if unit_system == UnitSystem.INCH else "mm"
@@ -583,7 +633,6 @@ class MainWindow(QMainWindow):
             message += f"  Std deviation: {fmt(mc.std_dev)} {unit}\n"
             message += f"  Observed range: {fmt(mc.minimum)} {unit} to {fmt(mc.maximum)} {unit}\n\n"
 
-            # Calculate sigma ranges from mean and std_dev
             plus_3sigma = mc.mean + 3 * mc.std_dev
             minus_3sigma = mc.mean - 3 * mc.std_dev
             plus_2sigma = mc.mean + 2 * mc.std_dev
@@ -594,14 +643,39 @@ class MainWindow(QMainWindow):
             message += (
                 "This simulation randomly sampled each contributor from its specified\n"
                 "distribution (normal, uniform, or triangular) to predict the actual\n"
-                "assembly variation. The histogram in the results panel shows the\n"
-                "full distribution shape."
+                "assembly variation."
             )
 
-        QMessageBox.information(
+        # --- Engineering Warnings ---
+        chain_id = self._get_active_chain_id()
+        chain = self.controller.get_chain(chain_id) if chain_id else None
+        warnings = evaluate_warnings(chain, results) if chain else []
+
+        if warnings:
+            message += "\n\n" + "=" * 40 + "\n"
+            message += "\u26a0  ENGINEERING WARNINGS\n"
+            message += "=" * 40 + "\n\n"
+
+            for w in warnings:
+                severity_icon = {
+                    WarningSeverity.CRITICAL: "\u274c CRITICAL",
+                    WarningSeverity.CAUTION: "\u26a0\ufe0f  CAUTION",
+                    WarningSeverity.INFO: "\u2139\ufe0f  INFO",
+                }
+                message += f"{severity_icon[w.severity]}: {w.title}\n"
+                message += f"  {w.message}\n"
+                if w.detail:
+                    message += f"  \u2192 {w.detail}\n"
+                message += "\n"
+
+        # Choose dialog type based on warning severity
+        has_critical = any(w.severity == WarningSeverity.CRITICAL for w in warnings)
+
+        ResultsSummaryDialog.show_results(
             self,
             f"Analysis Results \u2014 {chain_name}",
             message,
+            has_critical=has_critical,
         )
 
     # ------------------------------------------------------------------
