@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
 )
 
 from tolerance_analysis.engine.models import Contributor, DistributionType
+from tolerance_analysis.gui.tolerance_input import ToleranceInputWidget
 
 
 class DetailPanel(QWidget):
@@ -39,6 +40,7 @@ class DetailPanel(QWidget):
     distribution_changed = pyqtSignal(str, str)  # contributor_id, distribution value
     notes_changed = pyqtSignal(str, str)  # contributor_id, notes text
     material_changed = pyqtSignal(str, str)  # contributor_id, material text
+    tolerance_changed = pyqtSignal(str, float, float, str)  # id, upper, lower, tol_type
 
     # Maximum character limits
     MAX_NOTES_CHARS = 500
@@ -71,6 +73,11 @@ class DetailPanel(QWidget):
         self._name_label = QLabel()
         self._name_label.setStyleSheet("font-weight: 600;")
         detail_layout.addRow("Name:", self._name_label)
+
+        # Tolerance input (NX-style format picker)
+        self._tolerance_input = ToleranceInputWidget()
+        self._tolerance_input.tolerance_changed.connect(self._on_tolerance_changed)
+        detail_layout.addRow("Tolerance:", self._tolerance_input)
 
         # Distribution type picker
         self._distribution_combo = QComboBox()
@@ -130,9 +137,18 @@ class DetailPanel(QWidget):
         self._distribution_combo.blockSignals(True)
         self._material_edit.blockSignals(True)
         self._notes_edit.blockSignals(True)
+        self._tolerance_input.blockSignals(True)
 
         # Populate fields
         self._name_label.setText(contributor.name)
+
+        # Set tolerance input
+        self._tolerance_input.set_nominal(contributor.nominal)
+        self._tolerance_input.set_values(
+            contributor.upper_tolerance,
+            contributor.lower_tolerance,
+            contributor.tolerance_type,
+        )
 
         # Set distribution combo to match contributor's distribution
         dist_index = self._distribution_combo.findData(contributor.distribution.value)
@@ -148,6 +164,7 @@ class DetailPanel(QWidget):
         self._distribution_combo.blockSignals(False)
         self._material_edit.blockSignals(False)
         self._notes_edit.blockSignals(False)
+        self._tolerance_input.blockSignals(False)
 
     def clear(self) -> None:
         """Reset the panel to its placeholder state."""
@@ -169,6 +186,12 @@ class DetailPanel(QWidget):
         dist_value = self._distribution_combo.itemData(index)
         if dist_value is not None:
             self.distribution_changed.emit(self._current_contributor_id, dist_value)
+
+    def _on_tolerance_changed(self, upper: float, lower: float, tol_type: str, nom_override) -> None:
+        """Handle tolerance input widget change."""
+        if self._current_contributor_id is None:
+            return
+        self.tolerance_changed.emit(self._current_contributor_id, upper, lower, tol_type)
 
     def _on_notes_changed(self) -> None:
         """Handle notes text edit change, enforcing 500 char limit."""

@@ -253,6 +253,7 @@ class MainWindow(QMainWindow):
         self._detail_panel.distribution_changed.connect(self._on_distribution_changed)
         self._detail_panel.notes_changed.connect(self._on_notes_changed)
         self._detail_panel.material_changed.connect(self._on_material_changed)
+        self._detail_panel.tolerance_changed.connect(self._on_tolerance_changed)
 
     # ------------------------------------------------------------------
     # Signal Handlers — Cross-widget wiring
@@ -283,6 +284,7 @@ class MainWindow(QMainWindow):
                 iterations = results.monte_carlo.num_iterations
                 self.controller.run_monte_carlo(chain_id, iterations=iterations)
 
+        self._chain_tab._refresh_table()
         self._refresh_visualization()
         self._refresh_results()
 
@@ -344,6 +346,27 @@ class MainWindow(QMainWindow):
             if contrib.id == contributor_id:
                 contrib.material = material
                 break
+
+    def _on_tolerance_changed(self, contributor_id: str, upper: float, lower: float, tol_type: str) -> None:
+        """Update a contributor's tolerance values from the detail panel input widget."""
+        chain_id = self._get_active_chain_id()
+        if chain_id is None:
+            return
+        chain = self.controller.get_chain(chain_id)
+        if chain is None:
+            return
+        from tolerance_analysis.engine.models import ToleranceType
+
+        for contrib in chain.contributors:
+            if contrib.id == contributor_id:
+                contrib.upper_tolerance = upper
+                contrib.lower_tolerance = lower
+                try:
+                    contrib.tolerance_type = ToleranceType(tol_type)
+                except ValueError:
+                    pass
+                break
+        self._on_chain_data_changed()
 
     # ------------------------------------------------------------------
     # Refresh Helpers

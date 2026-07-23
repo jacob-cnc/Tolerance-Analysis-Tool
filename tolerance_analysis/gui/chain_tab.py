@@ -42,12 +42,10 @@ MAX_CONTRIBUTORS = 100
 COL_INDEX = 0
 COL_NAME = 1
 COL_NOMINAL = 2
-COL_UPPER_TOL = 3
-COL_LOWER_TOL = 4
-COL_DIRECTION = 5
-COL_TYPE = 6
+COL_TOLERANCE = 3
+COL_DIRECTION = 4
 
-COLUMN_HEADERS = ["#", "Name", "Nominal", "Upper Tol", "Lower Tol", "Direction", "Type"]
+COLUMN_HEADERS = ["#", "Name", "Nominal", "Tolerance", "Direction"]
 
 # Direction display mapping
 DIRECTION_OPTIONS = ["Positive", "Negative"]
@@ -195,22 +193,17 @@ class ChainTab(QWidget):
         header.setSectionResizeMode(COL_INDEX, QHeaderView.Fixed)
         self._table.setColumnWidth(COL_INDEX, 40)
         header.setSectionResizeMode(COL_NAME, QHeaderView.Stretch)
-        for col in (COL_NOMINAL, COL_UPPER_TOL, COL_LOWER_TOL):
-            header.setSectionResizeMode(col, QHeaderView.Interactive)
-            self._table.setColumnWidth(col, 135)
-        for col in (COL_DIRECTION, COL_TYPE):
-            header.setSectionResizeMode(col, QHeaderView.Interactive)
-            self._table.setColumnWidth(col, 120)
+        header.setSectionResizeMode(COL_NOMINAL, QHeaderView.Interactive)
+        self._table.setColumnWidth(COL_NOMINAL, 135)
+        header.setSectionResizeMode(COL_TOLERANCE, QHeaderView.Interactive)
+        self._table.setColumnWidth(COL_TOLERANCE, 180)
+        header.setSectionResizeMode(COL_DIRECTION, QHeaderView.Interactive)
+        self._table.setColumnWidth(COL_DIRECTION, 120)
 
         # Set delegates for inline editing
         self._table.setItemDelegateForColumn(COL_NOMINAL, NumericDelegate(self._table))
-        self._table.setItemDelegateForColumn(COL_UPPER_TOL, NumericDelegate(self._table))
-        self._table.setItemDelegateForColumn(COL_LOWER_TOL, NumericDelegate(self._table))
         self._table.setItemDelegateForColumn(
             COL_DIRECTION, ComboDelegate(DIRECTION_OPTIONS, self._table)
-        )
-        self._table.setItemDelegateForColumn(
-            COL_TYPE, ComboDelegate(TYPE_OPTIONS, self._table)
         )
 
         layout.addWidget(self._table)
@@ -426,21 +419,15 @@ class ChainTab(QWidget):
             nom_item = QTableWidgetItem(str(contrib.nominal))
             self._table.setItem(row, COL_NOMINAL, nom_item)
 
-            # Upper tolerance
-            upper_item = QTableWidgetItem(str(contrib.upper_tolerance))
-            self._table.setItem(row, COL_UPPER_TOL, upper_item)
-
-            # Lower tolerance
-            lower_item = QTableWidgetItem(str(contrib.lower_tolerance))
-            self._table.setItem(row, COL_LOWER_TOL, lower_item)
+            # Tolerance (formatted display string, read-only — edit via detail panel)
+            tol_str = self._format_tolerance(contrib)
+            tol_item = QTableWidgetItem(tol_str)
+            tol_item.setFlags(tol_item.flags() & ~Qt.ItemIsEditable)
+            self._table.setItem(row, COL_TOLERANCE, tol_item)
 
             # Direction
             dir_item = QTableWidgetItem(DIRECTION_REVERSE.get(contrib.direction, "Positive"))
             self._table.setItem(row, COL_DIRECTION, dir_item)
-
-            # Type
-            type_item = QTableWidgetItem(TYPE_REVERSE.get(contrib.tolerance_type, "Bilateral"))
-            self._table.setItem(row, COL_TYPE, type_item)
 
         self._updating = False
 
@@ -469,18 +456,13 @@ class ChainTab(QWidget):
             contributor.name = value
             self._clear_cell_error(item)
 
-        elif col in (COL_NOMINAL, COL_UPPER_TOL, COL_LOWER_TOL):
+        elif col == COL_NOMINAL:
             valid, parsed, error_msg = self._controller.validator.validate_numeric_input(
                 value,
                 COLUMN_HEADERS[col],
             )
             if valid and parsed is not None:
-                if col == COL_NOMINAL:
-                    contributor.nominal = parsed
-                elif col == COL_UPPER_TOL:
-                    contributor.upper_tolerance = parsed
-                else:
-                    contributor.lower_tolerance = parsed
+                contributor.nominal = parsed
                 self._clear_cell_error(item)
             else:
                 self._set_cell_error(item, error_msg)
@@ -492,11 +474,7 @@ class ChainTab(QWidget):
                 contributor.direction = direction
                 self._clear_cell_error(item)
 
-        elif col == COL_TYPE:
-            tol_type = TYPE_MAP.get(value)
-            if tol_type:
-                contributor.tolerance_type = tol_type
-                self._clear_cell_error(item)
+        # COL_TOLERANCE is read-only (edited via detail panel)
 
         self.chain_changed.emit()
 
@@ -513,6 +491,19 @@ class ChainTab(QWidget):
         self.contributor_selected.emit(contributor_id)
 
     # --- Validation feedback ---
+
+    @staticmethod
+    def _format_tolerance(contrib: Contributor) -> str:
+        """Format a contributor's tolerance for display in the table.
+
+        Examples: "±0.0010", "+0.0020 / −0.0010", "Lim [1.000, 1.002]"
+        """
+        if contrib.tolerance_type == ToleranceType.LIMIT:
+            return f"Lim [{contrib.lower_tolerance:.4f}, {contrib.upper_tolerance:.4f}]"
+        elif abs(contrib.upper_tolerance - contrib.lower_tolerance) < 1e-10:
+            return f"±{contrib.upper_tolerance:.4f}"
+        else:
+            return f"+{contrib.upper_tolerance:.4f} / −{contrib.lower_tolerance:.4f}"
 
     def _set_cell_error(self, item: QTableWidgetItem, message: str) -> None:
         """Mark a cell as invalid with red background and error tooltip.
