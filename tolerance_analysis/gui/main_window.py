@@ -284,7 +284,10 @@ class MainWindow(QMainWindow):
                 iterations = results.monte_carlo.num_iterations
                 self.controller.run_monte_carlo(chain_id, iterations=iterations)
 
-        self._chain_tab._refresh_table()
+        # Only refresh table if the change didn't originate from a table cell edit
+        # (avoids destroying QTableWidgetItems mid-callback)
+        if not getattr(self._chain_tab, '_table_edit_in_progress', False):
+            self._chain_tab._refresh_table()
         self._refresh_visualization()
         self._refresh_results()
 

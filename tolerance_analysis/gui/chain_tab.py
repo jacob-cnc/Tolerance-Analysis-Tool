@@ -151,6 +151,7 @@ class ChainTab(QWidget):
         self._controller = controller
         self._current_chain_id: Optional[str] = None
         self._updating = False  # Guard against recursive updates
+        self._table_edit_in_progress = False  # Guard against table refresh during cell edit
 
         self._setup_ui()
         self._connect_signals()
@@ -476,7 +477,11 @@ class ChainTab(QWidget):
 
         # COL_TOLERANCE is read-only (edited via detail panel)
 
+        # Emit signal — but mark that change came from table so refresh
+        # doesn't destroy the items we're still referencing
+        self._table_edit_in_progress = True
         self.chain_changed.emit()
+        self._table_edit_in_progress = False
 
     def _on_cell_clicked(self, row: int, col: int) -> None:
         """Emit contributor_selected when a row is clicked."""
