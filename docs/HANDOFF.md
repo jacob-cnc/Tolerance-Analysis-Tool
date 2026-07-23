@@ -14,12 +14,12 @@ Each session adds an entry at the top of the Session Log (newest first). An inco
 
 | Field | Value |
 |-------|-------|
-| **Phase** | Implementation complete — UI polish in progress |
+| **Phase** | Feature development — NX-style tolerance input, warnings engine complete |
 | **Spec Location** | `docs/requirements.md`, `docs/design.md` |
 | **Kiro Spec Mirror** | `~/.kiro/specs/tolerance-analysis-tool/` |
 | **Workflow** | Requirements-first feature spec |
-| **Blocked On** | Visualization text legibility fixes (overlapping/cutoff labels on canvas) |
-| **Open Questions** | Best approach for label layout in QPainter visualization when bar segments are narrow |
+| **Blocked On** | Nothing — ready for help guide drafting |
+| **Open Questions** | None |
 
 ---
 
@@ -54,6 +54,117 @@ Each session adds an entry at the top of the Session Log (newest first). An inco
 ---
 
 ## Session Log
+
+### Session 3 -- 2026-07-23 (Thursday)
+
+**Objective:** Fix visualization legibility, redesign chart layout, add engineering warnings, NX-style tolerance input.
+
+**Completed:**
+1. **Opposed-bar visualization redesign** — replaced sequential bar chart with a two-row layout:
+   - Positive contributors stacked on top row (blue)
+   - Negative contributors stacked on bottom row (orange)
+   - Both rows left-aligned; gap between endpoints is visually obvious
+   - Green gap indicator for clearance, red for interference
+   - Dashed vertical alignment lines connecting endpoints
+2. **Label collision avoidance** — labels placed in dedicated zone below each bar row with automatic row staggering and leader lines; no overlap regardless of bar width
+3. **Value collision avoidance** — values inside bars when they fit, above with multi-row staggering when they don't; clamped to canvas bounds
+4. **Engineering warnings engine** (`engine/warnings.py`):
+   - Detects: zero nominal clearance, worst-case interference, statistical interference probability, Monte Carlo reject rate, low Cpk, missing directions
+   - Corrected RSS interference probability calculation using actual normal CDF (was incorrectly reporting 0.27% for scenarios that are actually 50%)
+   - Warnings display on canvas as colored banners and in results dialog
+5. **Analysis auto-rerun** — editing any contributor field automatically reruns previously computed analyses and refreshes visualization + results
+6. **Scrollable results dialog** — replaced QMessageBox with `ResultsSummaryDialog` (scrollable QTextEdit) so warnings aren't cut off
+7. **NX-style tolerance input widget** (`gui/tolerance_input.py`):
+   - Four format buttons: ±X, +X/−Y, Limits, Fit Class
+   - Fields morph based on selected format
+   - ISO 286 fit class auto-lookup with deviation display
+8. **ISO 286 lookup engine** (`engine/iso286.py`):
+   - IT1–IT18 grades for 13 size ranges (0–500mm)
+   - Hole deviations: H, G, F, E, D
+   - Shaft deviations: h, g, f, e, d, c, k, m, n, p, r, s, js
+   - Fit descriptions for common pairs (H7/g6, H7/h6, etc.)
+9. **Simplified contributor table** — replaced Upper Tol + Lower Tol + Type columns with single formatted "Tolerance" column (e.g., "±0.0010", "+0.002/−0.001", "Lim [1.000, 1.002]")
+10. **Debug dock** (`gui/viz_debug_dock.py`) — dockable panel with live sliders for tuning visualization parameters
+11. **Fixed C++ object deletion crash** — guarded table refresh from occurring mid-cell-edit callback
+
+**Known Issues:**
+- Property-based tests still not written (optional tasks)
+- Help guide content is placeholder — needs full rewrite with practical examples
+- The VizDebugDock is a dev tool that should be removed before release (or hidden behind a flag)
+
+**Decisions Made:**
+- Opposed-bar layout is fundamentally more useful than sequential bars — makes gap/interference visually obvious
+- RSS interference warning now uses actual P(gap < 0) via normal CDF rather than the misleading "0.27% outside ±3σ" approximation
+- Tolerance "Type" column removed from table — type is now implicit from how the user enters values (format picker in detail panel)
+- ISO 286 data stored internally in micrometers/mm, converted to inches on output
+- Table tolerance column is read-only; tolerance editing happens exclusively in detail panel via the format picker
+
+**Next Session Should:**
+1. Draft a comprehensive help guide with:
+   - How to set up a stack-up (choosing directions, the bore/shaft example)
+   - Explanation of each analysis method (worst-case, RSS, Monte Carlo) with when to use each
+   - How to interpret the visualization
+   - How to use the ISO 286 fit class lookup
+   - Common pitfalls (direction confusion, zero-gap scenarios)
+2. Consider adding iteration count input dialog for Monte Carlo
+3. Optional: write property-based tests (P1–P11)
+4. Consider adding a "Fit Analysis" mode where user specifies hole + shaft fit codes and gets a full fit characterization
+
+**File Map (updated):**
+```
+Tolerance-Analysis-Tool/
++-- README.md
++-- pyproject.toml
++-- docs/
+|   +-- HANDOFF.md               # <- You are here
+|   +-- GUIDE.md                 # User guide (needs rewrite)
+|   +-- requirements.md          # Formal requirements (EARS format)
+|   +-- design.md                # Technical design document
++-- examples/
+|   +-- bearing_housing_stack.json
++-- tests/
+|   +-- conftest.py              # Hypothesis strategies
+|   +-- render_harness.py        # Offscreen PNG render utility
+|   +-- renders/                 # Output PNGs
+|   +-- properties/              # Property-based tests (not yet written)
+|   +-- unit/
++-- tolerance_analysis/
+    +-- __init__.py
+    +-- main.py
+    +-- engine/
+    |   +-- models.py
+    |   +-- converter.py
+    |   +-- validator.py
+    |   +-- worst_case.py
+    |   +-- rss.py
+    |   +-- monte_carlo.py
+    |   +-- warnings.py          # NEW: Engineering warnings engine
+    |   +-- iso286.py            # NEW: ISO 286 fit class lookup
+    +-- boundary/
+    |   +-- controller.py
+    |   +-- unit_converter.py
+    |   +-- standards.py
+    +-- gui/
+    |   +-- main_window.py
+    |   +-- chain_tab.py         # Simplified: 5 columns now
+    |   +-- detail_panel.py      # Now includes tolerance input widget
+    |   +-- tolerance_input.py   # NEW: NX-style format picker
+    |   +-- visualization.py     # Rewritten: opposed-bar layout
+    |   +-- results_panel.py
+    |   +-- help_panel.py
+    |   +-- dialogs.py           # Added ResultsSummaryDialog
+    |   +-- viz_debug_dock.py    # NEW: Dev tool for live tuning
+    |   +-- theme.py
+    +-- io/
+    |   +-- project_file.py
+    |   +-- schema.py
+    |   +-- pdf_report.py
+    +-- resources/
+        +-- help/
+        +-- icons/
+```
+
+---
 
 ### Session 2 -- 2026-07-22 (Wednesday)
 
